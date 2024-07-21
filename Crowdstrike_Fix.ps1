@@ -50,38 +50,39 @@ $bitlockerVolumes = Get-BitLockerVolume
 foreach ($volume in $bitlockerVolumes) {
 	
     if ($volume.ProtectionStatus -eq "Off") {
-		Write-Host "Skipping volume '$($volume.MountPoint)' as BitLocker is '$($volume.ProtectionStatus)'"
+        Write-Host "Skipping volume '$($volume.MountPoint)' as BitLocker is '$($volume.ProtectionStatus)'"
         continue;
     }
 
-	Write-Host "Trying to unlock volume $($volume.MountPoint)"
+    Write-Host "Trying to unlock volume $($volume.MountPoint)"
 
-	# Loop through each entry in the CSV
-	$found = $false
-	foreach ($entry in $bitlockerData) {
-		
-		$bitlockerId = $entry.Id
-		$recoveryKey = $entry.Key
-		
+    # Loop through each entry in the CSV
+    $found = $false
+    foreach ($entry in $bitlockerData) {
+    
+        $bitlockerId = $entry.Id
+        $recoveryKey = $entry.Key
+	
         foreach ($keyProtector in $volume.KeyProtector) {
 
-		    if ($keyProtector.KeyProtectorType -eq "RecoveryPassword" -and $keyProtector.KeyProtectorId -eq "{$bitlockerId}") {
-			    Write-Host "Found matching BitLocker key. Unlocking volume $($volume.MountPoint)"
-			    $found = $true
-			    # Unlock the BitLocker protected drive using the recovery key
-			    Unlock-BitLocker -MountPoint $volume.MountPoint -RecoveryPassword $recoveryKey | Out-Null
-				break
-		    }
+            if ($keyProtector.KeyProtectorType -eq "RecoveryPassword" -and $keyProtector.KeyProtectorId -eq "{$bitlockerId}") {
+                Write-Host "Found matching BitLocker key. Unlocking volume $($volume.MountPoint)"
+                $found = $true
+                # Unlock the BitLocker protected drive using the recovery key
+                Unlock-BitLocker -MountPoint $volume.MountPoint -RecoveryPassword $recoveryKey | Out-Null
+		# TODO: We assume it unlocks, should add a check here.
+                break
+            }
         }
 		
-		if ($found -eq $true) {
-			break
-		}
-	}
-	
-	if ($found -eq $false) {
-		Write-Host "Failed to find BitLocker key for volume $($volume.MountPoint)" -ForegroundColor Red
-	}
+        if ($found -eq $true) {
+            break
+        }
+    }
+    
+    if ($found -eq $false) {
+        Write-Host "Failed to find BitLocker key for volume $($volume.MountPoint)" -ForegroundColor Red
+    }
 }
 
 Write-Host ""
@@ -102,17 +103,17 @@ foreach ($drive in $drives) {
     
     # Check if the folder exists
     if (Test-Path -Path $fullFolderPath) {
-		Write-Host "Drive $($drive.Root) contains the CrowdStrike driver folder."
+        Write-Host "Drive $($drive.Root) contains the CrowdStrike driver folder."
         # Get the files matching the pattern
         $filesToDelete = Get-ChildItem -Path $fullFolderPath -Filter $filePattern
 
-		Write-Host "Attempting to delete files C-00000291*.sys in '$fullFolderPath'"
+        Write-Host "Attempting to delete files C-00000291*.sys in '$fullFolderPath'"
         # Delete the files
         foreach ($file in $filesToDelete) {
-			if ($file.FullName.Length -gt 0) {
-				Write-Host "Deleting file '$($file.FullName)'"
-				Remove-Item -Path $file.FullName -Force
-			}
+            if ($file.FullName.Length -gt 0) {
+                Write-Host "Deleting file '$($file.FullName)'"
+                Remove-Item -Path $file.FullName -Force
+            }
         }
     }
 }
