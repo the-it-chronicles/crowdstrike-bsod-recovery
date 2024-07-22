@@ -7,6 +7,8 @@
 
 This project was developed to provide staff with a simple USB drive pre-loaded with all of our BitLocker keys to deploy the CrowdStrike BSOD fix to physical machines.
 
+This is **NOT** an official solution. It was developed by a third party out of necessity.
+
 ## Usage
 
 A csv file containing the exported BitLocker id and key pairs is copied to the root of the USB drive before placing it into an affected computer and booting from USB. Upon booting, a script automatically unlocks the BitLocker encryption and deletes the offending .sys file before prompting the user to restart.
