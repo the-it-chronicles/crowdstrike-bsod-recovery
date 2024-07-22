@@ -43,12 +43,25 @@ Write-Host ""
 Write-Host "Found $($bitlockerData.Count + 0) BitLocker keys in CSV file."
 Write-Host ""
 
+$letters = @("S", "T", "U", "V", "W", "X")
+$i = 0
+$partitions = Get-Partition
+foreach ($part in $partitions) {
+    if ($part.Type -eq "Basic") {
+        Write-Host "Partition $($part.PartitionNumber) on disk $($part.DiskNumber) has no letter"
+        Set-Partition -DiskNumber $part.DiskNumber -PartitionNumber $part.PartitionNumber -NewDriveLetter $letters[$i]
+        $i++
+    }
+}
+
 # Get the BitLocker volumes
 $bitlockerVolumes = Get-BitLockerVolume
 
+$vol = $null
+
 # Find the volume that matches the BitLocker ID
 foreach ($volume in $bitlockerVolumes) {
-	
+    
     if ($volume.ProtectionStatus -eq "Off") {
         Write-Host "Skipping volume '$($volume.MountPoint)' as BitLocker is '$($volume.ProtectionStatus)'"
         continue;
@@ -59,22 +72,21 @@ foreach ($volume in $bitlockerVolumes) {
     # Loop through each entry in the CSV
     $found = $false
     foreach ($entry in $bitlockerData) {
-    
+        
         $bitlockerId = $entry.Id
         $recoveryKey = $entry.Key
-	
+        
         foreach ($keyProtector in $volume.KeyProtector) {
 
             if ($keyProtector.KeyProtectorType -eq "RecoveryPassword" -and $keyProtector.KeyProtectorId -eq "{$bitlockerId}") {
                 Write-Host "Found matching BitLocker key. Unlocking volume $($volume.MountPoint)"
                 $found = $true
                 # Unlock the BitLocker protected drive using the recovery key
-                Unlock-BitLocker -MountPoint $volume.MountPoint -RecoveryPassword $recoveryKey | Out-Null
-		# TODO: We assume it unlocks, should add a check here.
+                $vol = Unlock-BitLocker -MountPoint $volume.MountPoint -RecoveryPassword $recoveryKey
                 break
             }
         }
-		
+        
         if ($found -eq $true) {
             break
         }
