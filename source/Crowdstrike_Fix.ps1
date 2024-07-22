@@ -12,6 +12,7 @@ $csvPath = ""
 # Get a list of all drives
 $drives = Get-PSDrive -PSProvider FileSystem
 
+# Find which drive contains the CSV file
 foreach ($drive in $drives) {
     $fullFilePath = Join-Path -Path $drive.Root -ChildPath $csvFilename
     
@@ -23,18 +24,14 @@ foreach ($drive in $drives) {
 
 }
 
-# Use CSV file on the USB drive, if one exists, otherwise use the one embedded in WinPE
-# This allows us to override the file with a new one if needed
+# Let the user know which drive was picked, or report if the file could not be found.
 if ($csvPath.Length -gt 0) {
     Write-Host "Using CSV file found at '$csvPath'"
 } else {
     $csvPath = "$Env:SystemDrive\Windows\bitlocker_keys.csv"
-    Write-Host "Using CSV file at '$csvPath'"
+	Write-Host "Could not find CSV file '$csvFilename'. Please place this file in the root of the USB drive." -ForegroundColor Red
+    Write-Host "This script will continue, however you will need to manually enter the BitLocker key." -ForegroundColor Red
 }
-
-Write-Host ""
-Write-Host "Press Enter to continue." -ForegroundColor Yellow
-Read-Host
 
 # Read the CSV file. The CSV file should have columns: Id, Key
 $bitlockerData = Import-Csv -Path $csvPath
@@ -43,25 +40,26 @@ Write-Host ""
 Write-Host "Found $($bitlockerData.Count + 0) BitLocker keys in CSV file."
 Write-Host ""
 
-$letters = @("S", "T", "U", "V", "W", "X")
+# On some machines the internal System Drive does not have a drive letter when booted from WinPE
+# We therefore check for this and assign a letter
+$letters = @("Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z")
 $i = 0
 $partitions = Get-Partition
 foreach ($part in $partitions) {
-    if ($part.Type -eq "Basic") {
-        Write-Host "Partition $($part.PartitionNumber) on disk $($part.DiskNumber) has no letter"
+    if ($part.Type -notin @("System", "Reserved", "Recovery") -and [bool]$part.DriveLetter -eq $false) {
+        Write-Host "Partition $($part.PartitionNumber) on disk $($part.DiskNumber) has no letter, assigning '$($letters[$i]):\'"
         Set-Partition -DiskNumber $part.DiskNumber -PartitionNumber $part.PartitionNumber -NewDriveLetter $letters[$i]
         $i++
     }
 }
 
-# Get the BitLocker volumes
+# Get the BitLocker encrypted volumes
 $bitlockerVolumes = Get-BitLockerVolume
 
-$vol = $null
-
-# Find the volume that matches the BitLocker ID
+# Iterate through the volumes
 foreach ($volume in $bitlockerVolumes) {
     
+    # If the volume has BitLocker off, we skip it
     if ($volume.ProtectionStatus -eq "Off") {
         Write-Host "Skipping volume '$($volume.MountPoint)' as BitLocker is '$($volume.ProtectionStatus)'"
         continue;
@@ -69,21 +67,28 @@ foreach ($volume in $bitlockerVolumes) {
 
     Write-Host "Trying to unlock volume $($volume.MountPoint)"
 
-    # Loop through each entry in the CSV
     $found = $false
+    # Loop through each entry in the CSV
     foreach ($entry in $bitlockerData) {
         
         $bitlockerId = $entry.Id
         $recoveryKey = $entry.Key
         
+        # Each volume may have one or more KeyProtectors (i.e. Tpm and RecoveryPassword)
         foreach ($keyProtector in $volume.KeyProtector) {
 
+            # If the KeyProtector is of type RecoveryPassword and matches the CSV file entry, we try to unlock the volume
             if ($keyProtector.KeyProtectorType -eq "RecoveryPassword" -and $keyProtector.KeyProtectorId -eq "{$bitlockerId}") {
-                Write-Host "Found matching BitLocker key. Unlocking volume $($volume.MountPoint)"
+                Write-Host "Found matching BitLocker key. Attempting to unlock volume $($volume.MountPoint)"
                 $found = $true
                 # Unlock the BitLocker protected drive using the recovery key
                 $vol = Unlock-BitLocker -MountPoint $volume.MountPoint -RecoveryPassword $recoveryKey
-                break
+                if ($vol.LockStatus -eq "Unlocked") {
+                    Write-Host "Volume '$($volume.MountPoint)' successfuly unlocked." -ForegroundColor Green
+                    break
+                } else {
+                    Write-Host "Volume '$($volume.MountPoint)' failed to unlock!" -ForegroundColor Red
+                }
             }
         }
         
@@ -94,6 +99,20 @@ foreach ($volume in $bitlockerVolumes) {
     
     if ($found -eq $false) {
         Write-Host "Failed to find BitLocker key for volume $($volume.MountPoint)" -ForegroundColor Red
+		$key = $volume.KeyProtector | Where-Object { $_.KeyProtectorType -eq "RecoveryPassword" } | Select-Object -Property KeyProtectorId
+		Write-Host "BitLocker ID is '$key'"
+		$recoveryKey = Read-Host -Prompt "Manually enter BitLocker Key: "
+        if ($recoveryKey.Length -eq 0) {
+            Write-Host "No key provided. Press Enter to shutdown."
+            Wpeutil Shutdown
+        } else {
+            $vol = Unlock-BitLocker -MountPoint $volume.MountPoint -RecoveryPassword $recoveryKey
+            if ($vol.LockStatus -eq "Unlocked") {
+                Write-Host "Volume '$($volume.MountPoint)' successfuly unlocked." -ForegroundColor Green
+            } else {
+                Write-Host "Volume '$($volume.MountPoint)' failed to unlock!" -ForegroundColor Red
+            }
+        }
     }
 }
 

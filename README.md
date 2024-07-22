@@ -19,6 +19,10 @@ This is **NOT** an official solution. It was developed by a third party out of n
 
 A csv file containing the exported BitLocker id and key pairs is copied to the root of the USB drive before placing it into an affected computer and booting from USB. Upon booting, a script automatically unlocks the BitLocker encryption and deletes the offending .sys file before prompting the user to restart.
 
+![CSV File Screenshot](https://github.com/the-it-chronicles/crowdstrike-bsod-recovery/blob/main/media/csv_screenshot.png)
+
+
+
 ## Setup
 
 For instructions on how to make your own. See the following blog post.
