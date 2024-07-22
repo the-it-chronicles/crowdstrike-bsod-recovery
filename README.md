@@ -9,6 +9,12 @@ This project was developed to provide staff with a simple USB drive pre-loaded w
 
 This is **NOT** an official solution. It was developed by a third party out of necessity.
 
+## Benefits
+
+* No safe mode required
+* Automated BitLocker key entry
+* Automated deletion of offending file
+
 ## Usage
 
 A csv file containing the exported BitLocker id and key pairs is copied to the root of the USB drive before placing it into an affected computer and booting from USB. Upon booting, a script automatically unlocks the BitLocker encryption and deletes the offending .sys file before prompting the user to restart.
